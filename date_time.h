@@ -35,6 +35,7 @@ enum months
     December
 };
 
+
 struct moment
 {
     days week_day;
@@ -44,7 +45,7 @@ struct moment
     unsigned hour;
     unsigned minute;
     unsigned second;
-    int time_zone_offset;
+    int time_zone_offset; 
 };
 
 moment parse(std::string const& text);

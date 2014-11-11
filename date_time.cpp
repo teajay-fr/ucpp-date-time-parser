@@ -1,10 +1,42 @@
 // Copyright (C) 2014, Richard Thomson.  All rights reserved.
 #include "date_time.h"
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/fusion/tuple.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <stdexcept>
 
 using namespace boost::spirit::qi;
+
+struct date_part
+{
+    date_time::days week_day;
+    unsigned year;
+    date_time::months month;
+    unsigned day;
+};
+
+BOOST_FUSION_ADAPT_STRUCT(date_part,
+    (date_time::days, week_day)
+    (unsigned, day)
+    (date_time::months, month)
+    (unsigned, year)
+    );
+
+struct time_part
+{
+    unsigned hour;
+    unsigned minute;
+    unsigned second;
+    int time_zone_offset; 
+};
+
+BOOST_FUSION_ADAPT_STRUCT(
+    time_part,
+    (unsigned, hour)
+    (unsigned, minute)
+    (unsigned, second)
+    (int, time_zone_offset)
+    );
 
 BOOST_FUSION_ADAPT_STRUCT(date_time::moment,
     (date_time::days, week_day)
@@ -16,6 +48,23 @@ BOOST_FUSION_ADAPT_STRUCT(date_time::moment,
     (unsigned, second)
     (int, time_zone_offset)
 );
+
+// we provide a custom attribute transformation to allow its use as an int
+namespace boost { namespace spirit { namespace qi
+{
+    // in this case we just expose the embedded 'int' as the attribute instance
+    // to use, allowing to leave the function 'post()' empty
+    template <>
+    struct transform_attribute<date_time::moment, boost::fusion::vector2<date_part, time_part> >
+    {
+        typedef boost::fusion::vector2<date_part, time_part> val_type;
+        typedef val_type &type;
+        static type pre(date_time::moment& d) { return reinterpret_cast<type>(d); }
+        static void post(date_time::moment& val, val_type const& attr) {}
+        static void fail(date_time::moment&) {}
+    };
+    
+}}}
 
 namespace
 {
@@ -52,13 +101,16 @@ struct date_time_grammar : grammar<Iter, date_time::moment(), skipper>
         int_parser<int, 10, 4, 4> time_zone_offset;
         seconds = no_skip[(':' >> digit_2) | attr(0)];
         week_day = (day_names >> ',') | attr(date_time::Unspecified);
-        start = week_day >> digit_1_2 >> month_names >> digit_4
-            >> digit_2 >> no_skip[lit(':')] >> no_skip[digit_2] >> seconds >> time_zone_offset;
+        date = week_day >> digit_1_2 >> month_names >> digit_4;
+        time = digit_2 >> no_skip[lit(':')] >> no_skip[digit_2] >> seconds >> time_zone_offset;
+        start = attr_cast(date >> time);
     };
 
     symbols<char const, date_time::days> day_names;
     rule<Iter, date_time::days()> week_day;
     rule<Iter, unsigned(), skipper> seconds;
+    rule<Iter, date_part(), skipper> date;
+    rule<Iter, time_part(), skipper> time;
     symbols<char const, date_time::months> month_names;
     rule<Iter, date_time::moment(), skipper> start;
 };
